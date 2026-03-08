@@ -1,3 +1,7 @@
+import json
+import os
+
+
 def get_range_for_difficulty(difficulty: str):
     """Return (low, high) inclusive range for a given difficulty."""
     if difficulty == "Easy":
@@ -61,3 +65,60 @@ def update_score(current_score: int, outcome: str, attempt_number: int):
         return current_score - 5
 
     return current_score
+
+
+# ── High score persistence ─────────────────────────────────────────────────────
+
+HIGHSCORE_FILE = "highscores.json"
+
+
+def load_high_scores(filepath: str = HIGHSCORE_FILE) -> dict:
+    """Load per-difficulty high scores from a JSON file.
+
+    Returns an empty dict if the file doesn't exist or is corrupt,
+    so callers never have to handle missing-file errors themselves.
+    """
+    if not os.path.exists(filepath):
+        return {}
+    try:
+        with open(filepath, "r") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_high_score(difficulty: str, score: int, filepath: str = HIGHSCORE_FILE) -> bool:
+    """Persist a new high score for the given difficulty if it beats the current best.
+
+    Returns True when a new record was set, False when the existing best stands.
+    This lets the caller decide whether to show a congratulatory message.
+    """
+    scores = load_high_scores(filepath)
+    current_best = scores.get(difficulty, 0)
+
+    if score > current_best:
+        scores[difficulty] = score
+        with open(filepath, "w") as f:
+            json.dump(scores, f, indent=2)
+        return True
+
+    return False
+
+
+# ── Guess visualisation helper ─────────────────────────────────────────────────
+
+def guess_proximity_pct(guess: int, low: int, high: int) -> float:
+    """Return where *guess* falls in [low, high] as a fraction between 0.0 and 1.0.
+
+    Used to drive Streamlit progress bars so the player can see at a glance how
+    close each previous guess was to the edges of the allowed range — and, once
+    the game ends, how close they were to the secret number.
+
+    Edge cases:
+    - If the range has zero width the guess is trivially correct, so return 1.0.
+    - Clamp to [0, 1] to guard against out-of-range guesses (the UI allows them).
+    """
+    span = high - low
+    if span == 0:
+        return 1.0
+    return max(0.0, min(1.0, (guess - low) / span))

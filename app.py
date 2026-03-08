@@ -1,63 +1,22 @@
 import random
 import streamlit as st
 
-def get_range_for_difficulty(difficulty: str):
-    if difficulty == "Easy":
-        return 1, 20
-    if difficulty == "Normal":
-        return 1, 50
-    if difficulty == "Hard":
-        return 1, 100
-    return 1, 100
-
-
-def parse_guess(raw: str):
-    if raw is None:
-        return False, None, "Enter a guess."
-
-    if raw == "":
-        return False, None, "Enter a guess."
-
-    try:
-        if "." in raw:
-            value = int(float(raw))
-        else:
-            value = int(raw)
-    except Exception:
-        return False, None, "That is not a number."
-
-    return True, value, None
-
-
-def check_guess(guess, secret):
-    if guess == secret:
-        return "Win", "🎉 Correct!"
-    if guess > secret:
-        return "Too High", "📉 Go LOWER!"
-    return "Too Low", "📈 Go HIGHER!"
-
-
-def update_score(current_score: int, outcome: str, attempt_number: int):
-    if outcome == "Win":
-        points = 100 - 10 * (attempt_number + 1)
-        if points < 10:
-            points = 10
-        return current_score + points
-
-    if outcome == "Too High":
-        if attempt_number % 2 == 0:
-            return current_score + 5
-        return current_score - 5
-
-    if outcome == "Too Low":
-        return current_score - 5
-
-    return current_score
+from logic_utils import (
+    get_range_for_difficulty,
+    parse_guess,
+    check_guess,
+    update_score,
+    load_high_scores,
+    save_high_score,
+    guess_proximity_pct,
+)
 
 st.set_page_config(page_title="Glitchy Guesser", page_icon="🎮")
 
 st.title("🎮 Game Glitch Investigator")
 st.caption("An AI-generated guessing game. Something is off.")
+
+# ── Sidebar: Settings ──────────────────────────────────────────────────────────
 
 st.sidebar.header("Settings")
 
@@ -79,13 +38,31 @@ low, high = get_range_for_difficulty(difficulty)
 st.sidebar.caption(f"Range: {low} to {high}")
 st.sidebar.caption(f"Attempts allowed: {attempt_limit}")
 
+# ── Sidebar: High Scores ───────────────────────────────────────────────────────
+# Scores are read from highscores.json on every render so they stay fresh
+# after a new record is set mid-session.
+
+st.sidebar.divider()
+st.sidebar.subheader("🏆 High Scores")
+
+high_scores = load_high_scores()
+for diff in ["Easy", "Normal", "Hard"]:
+    best = high_scores.get(diff, "—")
+    # Mark the currently active difficulty so the player knows where they stand
+    active_marker = " ◀" if diff == difficulty else ""
+    st.sidebar.caption(f"**{diff}:** {best}{active_marker}")
+
+# ── Session state initialization ───────────────────────────────────────────────
+# Switching difficulty resets the whole game so the secret stays in range.
+# history stores dicts so the visualisation can colour bars by outcome.
+
 if "secret" not in st.session_state or st.session_state.get("difficulty") != difficulty:
     st.session_state.secret = random.randint(low, high)
     st.session_state.difficulty = difficulty
     st.session_state.attempts = 1
     st.session_state.score = 0
     st.session_state.status = "playing"
-    st.session_state.history = []
+    st.session_state.history = []  # list of {"guess": int|str, "outcome": str}
 
 if "attempts" not in st.session_state:
     st.session_state.attempts = 1
@@ -98,6 +75,43 @@ if "status" not in st.session_state:
 
 if "history" not in st.session_state:
     st.session_state.history = []
+
+# ── Sidebar: Guess History Visualization ───────────────────────────────────────
+# Each valid guess is rendered as a progress bar showing its position inside the
+# allowed range.  The secret is revealed as a separate bar only once the game
+# ends, giving the player a satisfying "ah, that close!" moment.
+
+if st.session_state.history:
+    st.sidebar.divider()
+    st.sidebar.subheader("📊 Guess History")
+    st.sidebar.caption(f"← {low} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {high} →")
+
+    game_over = st.session_state.status != "playing"
+
+    for entry in st.session_state.history:
+        guess = entry["guess"]
+        outcome = entry["outcome"]
+
+        if outcome == "Win":
+            icon = "🟢"
+        elif outcome == "Too High":
+            icon = "🔴"
+        elif outcome == "Too Low":
+            icon = "🔵"
+        else:
+            # Invalid / unparseable input — skip the bar, just show the raw text
+            st.sidebar.caption(f"⚪ _{guess}_ (invalid)")
+            continue
+
+        pct = guess_proximity_pct(guess, low, high)
+        st.sidebar.progress(pct, text=f"{icon} {guess}")
+
+    # After the game ends reveal exactly where the secret was
+    if game_over:
+        secret_pct = guess_proximity_pct(st.session_state.secret, low, high)
+        st.sidebar.progress(secret_pct, text=f"🎯 Secret: {st.session_state.secret}")
+
+# ── Main game area ─────────────────────────────────────────────────────────────
 
 st.subheader("Make a guess")
 
@@ -129,6 +143,9 @@ with col3:
 if new_game:
     st.session_state.attempts = 0
     st.session_state.secret = random.randint(low, high)
+    st.session_state.history = []
+    st.session_state.status = "playing"
+    st.session_state.score = 0
     st.success("New game started.")
     st.rerun()
 
@@ -145,15 +162,18 @@ if submit:
     ok, guess_int, err = parse_guess(raw_guess)
 
     if not ok:
-        st.session_state.history.append(raw_guess)
+        # Record the bad input so the sidebar history stays consistent
+        st.session_state.history.append({"guess": raw_guess, "outcome": "invalid"})
         st.error(err)
     else:
-        st.session_state.history.append(guess_int)
+        outcome = check_guess(guess_int, st.session_state.secret)
 
-        outcome, message = check_guess(guess_int, st.session_state.secret)
+        # Every valid guess goes into history for the visualisation
+        st.session_state.history.append({"guess": guess_int, "outcome": outcome})
 
         if show_hint:
-            st.warning(message)
+            hints = {"Win": "🎉 Correct!", "Too High": "📉 Go LOWER!", "Too Low": "📈 Go HIGHER!"}
+            st.warning(hints.get(outcome, outcome))
 
         st.session_state.score = update_score(
             current_score=st.session_state.score,
@@ -164,6 +184,12 @@ if submit:
         if outcome == "Win":
             st.balloons()
             st.session_state.status = "won"
+
+            # Persist the score and congratulate on a new personal best
+            is_new_best = save_high_score(difficulty, st.session_state.score)
+            if is_new_best:
+                st.toast(f"🏆 New high score for {difficulty}: {st.session_state.score}!")
+
             st.success(
                 f"You won! The secret was {st.session_state.secret}. "
                 f"Final score: {st.session_state.score}"

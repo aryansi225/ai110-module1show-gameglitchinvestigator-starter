@@ -54,3 +54,5 @@ This is a number guessing game where the player tries to guess a randomly chosen
 ## 🚀 Stretch Features
 
 ![alt text](image-2.png)
+
+![alt text](image-3.png)
