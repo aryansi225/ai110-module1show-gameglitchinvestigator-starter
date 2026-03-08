@@ -39,14 +39,19 @@ Answer each question in 3 to 5 sentences. Be specific and honest about what actu
 ## 4. What did you learn about Streamlit and state?
 
 - In your own words, explain why the secret number kept changing in the original app.
+  - Every time a user interacts with the page — clicking a button, typing in a box — Streamlit re-executes the entire Python script from top to bottom. Without protection, a line like `secret = random.randint(1, 100)` would run again on every rerun, generating a new number each time. The secret appeared to "change" mid-game because the game logic was comparing the guess against a freshly rolled number, not the one the player started with.
 - How would you explain Streamlit "reruns" and session state to a friend who has never used Streamlit?
+  - Imagine every button click causes the whole script to restart from line 1, like refreshing a page. Normal variables vanish and get recreated. `st.session_state` is a dictionary that survives those restarts — anything you store there persists between reruns. So instead of generating a new secret every time the script runs, you check `if "secret" not in st.session_state` first, and only generate it once on the very first run.
 - What change did you make that finally gave the game a stable secret number?
+  - The fix was wrapping the secret generation in a guard: `if "secret" not in st.session_state: st.session_state.secret = random.randint(low, high)`. This ensures `random.randint` only runs once — on the first load. Every subsequent rerun skips that block and uses the value already stored in session state.
 
 ---
 
 ## 5. Looking ahead: your developer habits
 
 - What is one habit or strategy from this project that you want to reuse in future labs or projects?
-  - This could be a testing habit, a prompting strategy, or a way you used Git.
+  - Running tests before touching any code. When I ran `pytest` first, it immediately pointed to exactly what was broken and why. I didn't need to guess or read every line — the failing test output told me where to look. That order (run tests → read failures → fix → re-run) is much faster than reading all the code first and trying to spot bugs manually.
 - What is one thing you would do differently next time you work with AI on a coding task?
+  - I would review the AI's proposed changes before approving them, rather than letting it run commands automatically. In this session I had to interrupt Claude when it tried to launch the Streamlit server before I understood the codebase. Staying in the driver's seat — using AI to explain and suggest, but reviewing before executing — leads to better understanding and fewer surprises.
 - In one or two sentences, describe how this project changed the way you think about AI generated code.
+  - AI-generated code can look completely correct at a glance while hiding subtle bugs that only show up under specific conditions, like the string-comparison issue that only triggered on even-numbered attempts. I now treat AI output the same way I'd treat code from any other source: read it, run the tests, and verify before trusting it.
