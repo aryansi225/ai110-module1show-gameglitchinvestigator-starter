@@ -9,6 +9,7 @@ from logic_utils import (
     load_high_scores,
     save_high_score,
     guess_proximity_pct,
+    hot_cold_label,
 )
 
 st.set_page_config(page_title="Glitchy Guesser", page_icon="🎮")
@@ -154,6 +155,34 @@ if st.session_state.status != "playing":
         st.success("You already won. Start a new game to play again.")
     else:
         st.error("Game over. Start a new game to try again.")
+
+    # ── End-of-game summary table ──────────────────────────────────────────
+    # Build one row per valid guess so the player can review every move.
+    valid_entries = [e for e in st.session_state.history if e["outcome"] != "invalid"]
+    if valid_entries:
+        st.subheader("📋 Game Summary")
+        rows = []
+        for i, entry in enumerate(valid_entries, start=1):
+            guess = entry["guess"]
+            outcome = entry["outcome"]
+            distance = abs(guess - st.session_state.secret)
+            temp_emoji, temp_label = hot_cold_label(
+                guess, st.session_state.secret, low, high
+            )
+            outcome_display = {
+                "Win": "🟢 Win",
+                "Too High": "🔴 Too High",
+                "Too Low": "🔵 Too Low",
+            }.get(outcome, outcome)
+            rows.append({
+                "Attempt": i,
+                "Guess": guess,
+                "Result": outcome_display,
+                "Distance": distance,
+                "Temperature": f"{temp_emoji} {temp_label}",
+            })
+        st.table(rows)
+
     st.stop()
 
 if submit:
@@ -171,9 +200,13 @@ if submit:
         # Every valid guess goes into history for the visualisation
         st.session_state.history.append({"guess": guess_int, "outcome": outcome})
 
-        if show_hint:
-            hints = {"Win": "🎉 Correct!", "Too High": "📉 Go LOWER!", "Too Low": "📈 Go HIGHER!"}
-            st.warning(hints.get(outcome, outcome))
+        if show_hint and outcome != "Win":
+            # Color-coded direction hint: blue = go higher, orange = go lower
+            temp_emoji, temp_label = hot_cold_label(guess_int, st.session_state.secret, low, high)
+            if outcome == "Too High":
+                st.warning(f"📉 Go **LOWER**! &nbsp; {temp_emoji} {temp_label}")
+            else:
+                st.info(f"📈 Go **HIGHER**! &nbsp; {temp_emoji} {temp_label}")
 
         st.session_state.score = update_score(
             current_score=st.session_state.score,

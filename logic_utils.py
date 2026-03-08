@@ -259,3 +259,65 @@ def guess_proximity_pct(guess: int, low: int, high: int) -> float:
     if span == 0:
         return 1.0
     return max(0.0, min(1.0, (guess - low) / span))
+
+
+# ── Hot / Cold temperature feedback ───────────────────────────────────────────
+
+# Thresholds expressed as fractions of the total range width.
+# A guess within 5 % of the secret is "Scorching"; beyond 50 % is "Freezing".
+_HOT_COLD_THRESHOLDS: list[tuple[float, str, str]] = [
+    (0.05, "🔥", "Scorching"),
+    (0.15, "♨️", "Hot"),
+    (0.30, "🌡️", "Warm"),
+    (0.50, "🌊", "Cool"),
+    (1.00, "🧊", "Freezing"),
+]
+
+
+def hot_cold_label(guess: int, secret: int, low: int, high: int) -> tuple[str, str]:
+    """Return a temperature emoji and label describing how close a guess is.
+
+    Closeness is measured as the absolute distance between *guess* and *secret*
+    expressed as a fraction of the full range width ``(high - low)``.  The
+    result is mapped to one of five temperature bands so the player gets
+    intuitive colour-coded feedback beyond a plain "Too High / Too Low".
+
+    Temperature bands (fraction of range width):
+
+    ============  =========  ============
+    Distance      Emoji      Label
+    ============  =========  ============
+    ≤ 5 %         🔥         Scorching
+    ≤ 15 %        ♨️         Hot
+    ≤ 30 %        🌡️         Warm
+    ≤ 50 %        🌊         Cool
+    > 50 %        🧊         Freezing
+    ============  =========  ============
+
+    Args:
+        guess: The integer value guessed by the player.
+        secret: The secret number the player is trying to find.
+        low: The inclusive lower bound of the guessable range.
+        high: The inclusive upper bound of the guessable range.
+
+    Returns:
+        A ``(emoji, label)`` tuple, e.g. ``("🔥", "Scorching")``.
+        Falls back to ``("🧊", "Freezing")`` when the range has zero width.
+
+    Examples:
+        >>> hot_cold_label(49, 50, 1, 100)
+        ('🔥', 'Scorching')
+        >>> hot_cold_label(1, 50, 1, 100)
+        ('🧊', 'Freezing')
+    """
+    span = high - low
+    if span == 0:
+        return "🔥", "Scorching"
+
+    distance_fraction = abs(guess - secret) / span
+    for threshold, emoji, label in _HOT_COLD_THRESHOLDS:
+        if distance_fraction <= threshold:
+            return emoji, label
+
+    # Unreachable — the last threshold is 1.0 and fractions are clamped above
+    return "🧊", "Freezing"  # pragma: no cover

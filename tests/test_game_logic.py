@@ -2,7 +2,7 @@ import os
 import json
 import tempfile
 
-from logic_utils import check_guess, parse_guess, guess_proximity_pct, load_high_scores, save_high_score
+from logic_utils import check_guess, parse_guess, guess_proximity_pct, load_high_scores, save_high_score, hot_cold_label
 
 def test_winning_guess():
     # If the secret is 50 and guess is 50, it should be a win
@@ -132,3 +132,37 @@ def test_save_high_score_different_difficulties():
         assert scores["Hard"] == 40
     finally:
         os.unlink(path)
+
+
+# ── hot_cold_label ─────────────────────────────────────────────────────────────
+
+def test_hot_cold_scorching():
+    # 1 away from secret in a range of 100 is well under 5 % — Scorching
+    emoji, label = hot_cold_label(49, 50, 1, 100)
+    assert label == "Scorching"
+    assert emoji == "🔥"
+
+
+def test_hot_cold_freezing():
+    # Guessing 1 when secret is 100 in range 1–100 is maximum distance
+    emoji, label = hot_cold_label(1, 100, 1, 100)
+    assert label == "Freezing"
+    assert emoji == "🧊"
+
+
+def test_hot_cold_exact_win_is_scorching():
+    # An exact match is distance 0 — should be Scorching
+    _, label = hot_cold_label(50, 50, 1, 100)
+    assert label == "Scorching"
+
+
+def test_hot_cold_zero_width_range():
+    # When low == high the function should not raise and return Scorching
+    _, label = hot_cold_label(5, 5, 5, 5)
+    assert label == "Scorching"
+
+
+def test_hot_cold_warm_band():
+    # 20 away in a range of 100 is 20 % → falls in the Warm band (≤ 30 %)
+    _, label = hot_cold_label(30, 50, 1, 100)
+    assert label == "Warm"
