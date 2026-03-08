@@ -49,6 +49,8 @@ This is a number guessing game where the player tries to guess a randomly chosen
 
 ![alt text](image.png)
 
+![alt text](image-1.png)
+
 ## 🚀 Stretch Features
 
-- [ ] [If you choose to complete Challenge 4, insert a screenshot of your Enhanced Game UI here]
+![alt text](image-2.png)
